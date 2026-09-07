@@ -28,15 +28,26 @@ HEADERS = {"User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
 # ================= 环境检测 =================
 
 def find_chrome_executable():
-    """动态查找 Chromium/Chrome 可执行文件，无硬编码版本号。"""
-    pw_cache = Path.home() / ".cache" / "ms-playwright"
-    if pw_cache.exists():
-        for pat in ("chromium-*/chrome-linux64/chrome",
-                    "chromium-*/chrome-linux/chrome",
-                    "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"):
-            hits = sorted(pw_cache.glob(pat), key=lambda p: p.stat().st_mtime, reverse=True)
+    """动态查找 Chromium/Chrome 可执行文件，无硬编码版本号。跨平台（含 Windows）。"""
+    # 候选 playwright 浏览器缓存目录（Linux/macOS + Windows LOCALAPPDATA）
+    cache_dirs = [Path.home() / ".cache" / "ms-playwright"]
+    localappdata = os.environ.get("LOCALAPPDATA")
+    if localappdata:
+        cache_dirs.append(Path(localappdata) / "ms-playwright")
+    patterns = ("chromium-*/chrome-linux64/chrome",
+                "chromium-*/chrome-linux/chrome",
+                "chromium-*/chrome-win/chrome.exe",
+                "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell")
+    for pw_cache in cache_dirs:
+        if not pw_cache.exists():
+            continue
+        for pat in patterns:
+            try:
+                hits = [p for p in pw_cache.glob(pat) if p.is_file()]
+            except OSError:
+                continue
             if hits:
-                return str(hits[0])
+                return str(sorted(hits, key=lambda p: p.stat().st_mtime, reverse=True)[0])
     for name in ("google-chrome", "chromium", "chromium-browser", "chrome"):
         p = shutil.which(name)
         if p:

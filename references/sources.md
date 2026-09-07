@@ -42,16 +42,18 @@
 - 结果中 `artworkUrl512` 替换 `/512x512bb.jpg` 为 `/1024x1024bb.png`
 - 必查 `sellerName` 是否为目标品牌的母公司或关联公司，防止同名 App 图标误用
 
-### 1.3 自媒体头像原图
+### 1.3 微博官方账号头像（T3，已实现）
 
-| 平台 | 头像原图 URL 模式 |
-|---|---|
-| 微博 | `https://wx1.sinaimg.cn/large/{uid}.jpg`（large 是原图，不要用 thumbnail/crop） |
-| 微信公众号 | 文章页 `<meta property="og:image">` |
-| 抖音 | `https://p3.douyinpic.com/img/aweme-avatar/{id}` 或从 sec_uid 页面解析 |
-| B站 | `https://i0.hdslb.com/bfs/face/{id}.jpg` |
-| 小红书 | 从用户页解析 |
-| YouTube | `https://yt3.googleusercontent.com/{id}=s1024-ck` |
+**微博（已实现，见 `source_router.py` 的 `tier3_weibo_avatar`）**：
+- 未登录一律被 Sina Visitor System 拦（requests 直连返回访客系统页），**必须用 Playwright 浏览器访客态**
+- uid 自动发现：浏览器打开 `https://s.weibo.com/user?q={品牌名}`，从结果链接抽 `weibo.com/u/{uid}`（外部搜索引擎如 Bing 被反爬，不要用）
+- 取当前头像：浏览器内 fetch `https://weibo.com/ajax/profile/info?uid={uid}`（weibo.com 页面内发起，避免跨域），取 `data.user.profile_image_url` / `avatar_hd` + `screen_name`
+- 历史头像：打开 `https://weibo.com/u/{uid}?tabtype=album`，正则收集页面内 `tvax*.sinaimg.cn` 图片 URL
+- **下载时把尺寸段换成 `large`**：`tvax4.sinaimg.cn/crop.0.0.512.512.180/xxx.jpg` → `tvax4.sinaimg.cn/large/xxx.jpg`（`crop.*`、`thumbnail`、`square`、`orj\d+` 等都是缩略/裁剪段；`mw2000` 已够大可保留）
+- URL 去掉 `?KID=imgbed...` 签名参数；下载时带 `Referer: https://weibo.com/`
+- **关键**：头像是哈希文件名（`tvax4.sinaimg.cn/large/001MXawKly8h...jpg`），**不是数字 uid**。以下模板全部无效，禁止使用：
+  - ❌ `https://wx1.sinaimg.cn/large/{uid}.jpg`（403，且文件名规则根本不成立）
+- 自动发现时按昵称匹配度过滤：只下「昵称==品牌词」「品牌词+官方后缀」「英文/拼音前缀+品牌词结尾」（luckincoffee瑞幸咖啡）的主账号；粉丝号（黄恺爱喝蜜雪冰城）、子 IP 号（蜜雪冰城雪王）排除，需要时用 `--weibo-uid` 显式指定
 
 ### 1.4 品牌素材站
 - LobeHub Icons: `https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png/light/{slug}.png` 和 `.../static-avatar/avatars/{slug}.webp`（覆盖 1600+ AI/科技品牌）

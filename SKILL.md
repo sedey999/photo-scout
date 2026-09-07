@@ -37,7 +37,7 @@ description: 多模态视觉门控图片下载器（Vision-Gated Photo Downloade
 Step 0  check-env：环境自检（playwright/Chromium、Bing、openpyxl、视觉能力提示）
 Step 1  discover：浏览器打开百度图片页 → DOM提取(URL+标题+坐标) → 按屏截图 screens/
                  + Bing 补充结果拼分页 contact_sheet
-         logo 类：先用 source_router 直取官网/App Store/自媒体头像（纯净 logo）
+         logo 类：先用 source_router 直取官网/App Store/微博官方头像（纯净 logo）
 Step 2  视觉门控：Agent 看 screens/page_XX.png（含原文位置/标题）或 contact_sheet，
                  按候选 id 勾选（logo 只选纯色/透明底标准 logo）
 Step 3  select：只下载勾选 id 的原图 → 以短边分辨率为主、清晰度为辅排序 → final/ + XLSX
@@ -57,7 +57,10 @@ python3 scripts/run.py --workdir ./out/<任务名> discover \
     [--extra-file urls.txt] [--sheet-size 36]
 
 # logo 类：先直取权威源（官网域名可从平台 search 搜“XX 官网”得到）
-python3 scripts/source_router.py "<品牌名>" ./out/<任务名>/brand --domains <官网域名>
+#   T1 官网 favicon/og:image，T2 App Store 图标，T3 微博官方头像（自动搜 uid）
+python3 scripts/source_router.py "<品牌名>" ./out/<任务名>/brand [--domains <官网域名>] \
+    [--weibo-uid <uid>...] [--weibo-album] [--no-weibo] [--no-appstore]
+#   微博 uid 不传时自动搜（s.weibo.com 用户搜索）；--weibo-album 额外扫头像相册历史头像
 #   生成 brand/urls.txt，喂给 discover：
 python3 scripts/run.py --workdir ./out/<任务名> discover \
     --query "<品牌名> logo" --extra-file ./out/<任务名>/brand/urls.txt
@@ -108,7 +111,7 @@ python3 scripts/run.py --workdir ./out/<任务名> report --query "<搜索词>"
 1. **直取权威源**（`source_router.py`）：
    - T1 官网 `apple-touch-icon` 最大尺寸 / og:image / 首页 logo
    - T2 App Store 图标（1024px，核对开发者名防同名 App）
-   - T3 自媒体头像原图（微博 large 图、抖音/公众号等）、素材站（LobeHub、WorldVectorLogo 等，需视觉复核）
+   - T3 微博官方账号头像：自动搜 uid（`s.weibo.com/user`）→ 浏览器访客态取 `/ajax/profile/info` 当前头像（换 large 原图），`--weibo-album` 可另扫头像相册历史头像；自动模式按昵称只留官方主账号，粉丝号/子 IP 号排除，详见 `references/sources.md` 1.3
    - 官网域名：内置少量快捷字典；不在字典中的品牌，用平台 search 搜“XX 官网”得到域名后 `--domains` 传入
 2. **视觉门控只选标准 logo**：纯色底或透明底上的 logo 本体；挂 logo 的大楼、门店、杯子、包装、工服、PPT 现场一律不选
 3. 多版本（新版/旧版、彩色/单色、横版/徽章）都保留并在报告注明；优先当前最新版
@@ -153,7 +156,7 @@ python3 scripts/run.py --workdir ./out/<任务名> report --query "<搜索词>"
 | `scripts/webctx_verify.py` | 来源页整页截屏 + 图注/上下文提取 |
 | `scripts/extract_page_images.py` | 从任意网页抽 `<img>` URL（配合平台 search 用） |
 | `references/scoring.md` | 视觉门控规则（场景标准 + 十条硬规则 + 提问模板） |
-| `references/sources.md` | 权威源清单（头像 URL 模板、搜索通道、反爬注意） |
+| `references/sources.md` | 权威源清单（官网/App Store/微博头像、搜索通道、反爬注意） |
 
 ## 环境依赖
 
