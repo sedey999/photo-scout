@@ -38,6 +38,8 @@ Step 0  check-env：环境自检（playwright/Chromium、Bing、openpyxl、视�
 Step 1  discover：浏览器打开百度图片页 → DOM提取(URL+标题+坐标) → 按屏截图 screens/
                  + Bing 补充结果拼分页 contact_sheet
          logo 类：先用 source_router 直取官网/App Store/微博官方头像（纯净 logo）
+         可选：平台若装了搜图工具（askecho image_search / 火山引擎 image_search 等），
+              先直取图片直链写入 urls.txt，作为 --extra-file 补充（见下「可选通道」）
 Step 2  视觉门控：Agent 看 screens/page_XX.png（含原文位置/标题）或 contact_sheet，
                  按候选 id 勾选（logo 只选纯色/透明底标准 logo）
 Step 3  select：只下载勾选 id 的原图 → 以短边分辨率为主、清晰度为辅排序 → final/ + XLSX
@@ -76,6 +78,17 @@ python3 scripts/run.py --workdir ./out/<任务名> verify
 python3 scripts/run.py --workdir ./out/<任务名> report --query "<搜索词>"
 ```
 
+### 可选通道：平台搜图工具直取（有则用）
+
+平台若已安装**图片搜索类工具**（askecho 的 `web_search(SearchType="image")`、火山引擎 `image_search`，或其他同类 MCP），可先走这条通道，省掉“开搜索页 → 按屏截图”：
+
+1. 用「主体 + 场景/职务」组合词调用（如 `王传福 比亚迪 董事长`），拿若干条结果；
+2. 取其中的**图片直链**写入 `<workdir>/brand/urls.txt`（一行一条）；返回里若有**水印 / 尺寸 / 清晰度**字段，先按需过滤（弃水印图、弃过小图）；`Title` 与来源页一并记下备核；
+3. 喂给 discover：`--extra-file "<workdir>/brand/urls.txt"`；
+4. **照旧走视觉门控** —— 工具给的画面描述只是线索，不替代看图。
+
+> 属**可选增强**：没有这类工具就走默认通道即可。单次返回条数通常很少（如 5 条），需多组查询词拼量。
+
 产物结构：
 ```
 <workdir>/
@@ -84,7 +97,10 @@ python3 scripts/run.py --workdir ./out/<任务名> report --query "<搜索词>"
 ├── candidates.json      ← 全部候选元数据（id、URL、标题、来源页、坐标、屏号）
 ├── thumbs/              ← 缩略图
 ├── final/               ← 最终选中原图（按质量排序，文件名含候选 id）
-├── selected.json        ← 选中图元数据（来源 URL 可追溯）
+│                             ⚠️ 同一 workdir 分多轮 select 时这里会**累积**，不覆盖
+├── selected.json        ← **最近一次** select 的元数据（来源 URL 可追溯）
+├── selected_history.json    ← 累积全部轮次的元数据（按 filename 去重；查多轮来源用这个）
+├── selected_history/        ← 每轮 select 的不可变快照（selected_<时间戳>.json）
 ├── verify/              ← 来源页整页截屏 + 图注（复核用）
 └── report.xlsx          ← 三表：选中图片/全部候选/任务信息
 ```
@@ -165,3 +181,15 @@ python3 scripts/run.py --workdir ./out/<任务名> report --query "<搜索词>"
 - Linux 沙箱如遇 pip 权限问题可加 `--break-system-packages`
 - `python3 scripts/run.py check-env` 一键自检
 - Chromium 路径自动查找（缓存目录通配 → 系统 PATH），无硬编码；工作目录全由 `--workdir` 传入
+
+## 变更记录
+
+**v1.1（2026-10-13）—— 修复多轮 select 导致来源不可追溯**
+
+- 问题：`select` 写 `selected.json` 是**整文件覆盖**，而 `final/` 里的图片是**累积**的（还专门做了重名规避）。同一 workdir 分多轮 select 时，只有最后一轮的记录在案，早先轮次下载的图片只剩文件、查不到来源页与标题，与「来源 URL 可追溯」的承诺矛盾。
+- 修复：`select` 现在额外写出两份归档，**`selected.json` 语义不变**（`verify` / `report` 不受影响）：
+  - `selected_history.json` —— 累积全部轮次，按 `filename` 去重
+  - `selected_history/selected_<时间戳>.json` —— 每轮一份不可变快照
+  - 归档失败只打印提示，不影响本次 select 结果。
+- 附带清理：交付包不再携带调试产物（`_*.txt`、`_*_imgs.json`、`_meta.json`、`_skillhub_meta.json`、`__pycache__` 等）。
+- 新增**可选通道**：平台若已安装图片搜索类工具（askecho `web_search(SearchType="image")`、火山引擎 `image_search` 或其他同类 MCP），可先直取图片直链写入 `urls.txt`，再走 `discover --extra-file` 补充候选；来源与筛选仍以视觉门控为准。

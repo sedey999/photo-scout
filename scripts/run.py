@@ -290,8 +290,43 @@ def cmd_select(args):
         print(f"  → {name}", flush=True)
 
     out_records = [{k: v for k, v in r.items() if k != "img"} for r in final_records]
+
+    # 1) 本次运行结果（语义不变：selected.json = 最近一次 select 的结果，
+    #    verify / report 都按它读取）
     (workdir / "selected.json").write_text(
         json.dumps(out_records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 2) 历史归档。同一个 workdir 允许分多轮 select 追加图片（final/ 里的图片会
+    #    累积、且带重名规避），但 selected.json 是整文件覆盖，会导致早先几轮下载
+    #    的图片查不到来源页/标题 —— 与「来源 URL 可追溯」相矛盾。这里补一份不可变
+    #    的历史记录：每轮一份快照 + 累积合并（按 filename 去重）。
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    try:
+        hist_dir = workdir / "selected_history"
+        hist_dir.mkdir(exist_ok=True)
+        (hist_dir / f"selected_{ts}.json").write_text(
+            json.dumps(out_records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        hist_path = workdir / "selected_history.json"
+        merged = {}
+        if hist_path.exists():
+            try:
+                for rec in json.loads(hist_path.read_text(encoding="utf-8")):
+                    if isinstance(rec, dict) and rec.get("filename"):
+                        merged[rec["filename"]] = rec
+            except Exception:
+                pass
+        for rec in out_records:
+            if rec.get("filename"):
+                merged[rec["filename"]] = rec
+        hist_path.write_text(
+            json.dumps(list(merged.values()), ensure_ascii=False, indent=2),
+            encoding="utf-8")
+        print(f"[select] 历史归档 → selected_history.json"
+              f"（累计 {len(merged)} 张，本次 {len(out_records)} 张）", flush=True)
+    except Exception as e:
+        print(f"[select] 历史归档失败（不影响本次结果）：{e}", flush=True)
+
     print(f"[select] 共 {len(final_records)} 张 → {workdir/'selected.json'}", flush=True)
 
     if HAS_XLSX and not args.no_xlsx:
